@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Conectando com as variáveis vindas do Next/font */
+  --font-sans: var(--font-geist);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist), sans-serif;
+  font-size: 16px; /* Fonte base maior */
+}
+
+/* Classes customizadas para melhor visualização em 1920x1080 */
+.form-section {
+  @apply bg-white p-10 rounded-2xl shadow-lg w-full max-w-2xl space-y-6 max-h-[80vh] overflow-y-auto;
+}
+
+.form-title {
+  @apply text-3xl font-bold text-left text-black;
+}
+
+.form-label {
+  @apply block text-lg font-semibold text-gray-600;
+}
+
+.form-input {
+  @apply w-full p-3 text-base border border-gray-300 rounded-xl text-black bg-white focus:outline-none focus:ring-2 focus:ring-fuchsia-500;
+}
+
+.form-select {
+  @apply w-full p-3 text-base border border-gray-300 rounded-xl text-black bg-white focus:outline-none focus:ring-2 focus:ring-fuchsia-500;
+}
+
+.form-checkbox {
+  @apply w-5 h-5 cursor-pointer;
+}
+
+.form-checkbox-label {
+  @apply text-black font-medium text-base;
+}
+
+.btn-primary {
+  @apply w-full p-3 text-base bg-fuchsia-100 border border-fuchsia-200 text-black font-semibold rounded-xl cursor-pointer hover:opacity-50 transition-opacity;
+}
+
+.btn-submit {
+  @apply py-3 px-6 text-lg rounded-xl w-full transition font-sans font-bold;
+}
+
+.resume-section {
+  @apply bg-white p-10 rounded-2xl shadow-lg w-full max-w-2xl space-y-6;
+}
+
+.resume-box {
+  @apply p-6 bg-gray-200 rounded-xl grid gap-3 content-center items-start;
+}
+
+.resume-text {
+  @apply text-black font-semibold text-base;
+}
+
+/* Animação fade-in para modais */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}

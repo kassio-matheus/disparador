@@ -1,0 +1,28 @@
+{
+  "name": "disparador-frutosdoacai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@prisma/client": "^6.17.1",
+    "bcryptjs": "^3.0.2",
+    "cookies-next": "^6.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "next": "^15.5.9",
+    "prisma": "^6.17.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-hook-form": "^7.65.0",
+    "reactjs-popup": "^2.0.6",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4"
+  }
+}
