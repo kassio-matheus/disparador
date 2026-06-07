@@ -108,6 +108,9 @@ export default function Form() {
   const [horaInicio, setHoraInicio] = useState("");
   const [horaFim, setHoraFim] = useState("");
 
+  const [notificacaoAtivo, setNotificacaoAtivo] = useState(false)
+  const [atendenteNotificacao, setSelectedAtendenteNotificacao] = useState(null);
+
   // useEffect para desabilitar fracionamento quando limites < 5
   useEffect(() => {
     if (limites < 5 && fracionamentoAtivo) {
@@ -254,6 +257,8 @@ export default function Form() {
       horaFim,
       hasName,
       atendenteCounts,
+      notificacaoAtivo,
+      atendenteNotificacao,
     };
     setDisparos([estadoAtual]);
     setActiveDisparoIndex(0);
@@ -283,6 +288,7 @@ export default function Form() {
       horaFim: "",
       hasName: false,
       atendenteCounts: {},
+      notificacao: atendenteNotificacao,
     };
     setDisparos([...disparos, novoDisparo]);
     setActiveDisparoIndex(disparos.length);
@@ -465,6 +471,7 @@ export default function Form() {
               hora_fim: disparo.horaFim || "",
             }
           : { ativo: false },
+        notificacao: disparo.atendenteNotificacao
       });
     }
 
@@ -545,6 +552,8 @@ export default function Form() {
       horaInicio,
       horaFim,
       hasName,
+      notificacaoAtivo,
+      atendenteNotificacao
     };
   };
 
@@ -924,6 +933,8 @@ export default function Form() {
       setHoraFim(disparo.horaFim);
       setHasName(disparo.hasName || false);
       setAtendenteCounts(disparo.atendenteCounts || {});
+      setNotificacaoAtivo(disparo.notificacaoAtivo)
+      setSelectedAtendenteNotificacao(null)
       // Aguarda próximo render para liberar
       setTimeout(() => {
         isLoadingDisparoData.current = false;
@@ -961,6 +972,8 @@ export default function Form() {
         horaFim,
         hasName,
         atendenteCounts,
+        notificacaoAtivo,
+        atendenteNotificacao
       };
       if (JSON.stringify(novosDisparos) !== JSON.stringify(disparos)) {
         setDisparos(novosDisparos);
@@ -988,6 +1001,8 @@ export default function Form() {
     horaFim,
     hasName,
     atendenteCounts,
+    notificacaoAtivo,
+    atendenteNotificacao
   ]);
 
   // mapeia funil + etapa para etapa_final
@@ -1211,6 +1226,7 @@ export default function Form() {
         : {
             ativo: false,
           },
+      notificacao: atendenteNotificacao
     };
 
     try {
@@ -3144,6 +3160,181 @@ export default function Form() {
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+               {/* Notificar membro */}
+              {funil?.value &&
+                etapas.length !== 0 &&
+                selectedAtendentes.length > 0 && (
+                  <div className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-fuchsia-50 to-purple-50 rounded-3xl border-2 border-violet-200 p-4 transition-all duration-300">
+                    {/* Decoração de fundo animada */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-fuchsia-200/30 to-purple-300/30 rounded-full blur-3xl -z-0 animate-pulse"></div>
+                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-violet-200/30 to-pink-300/30 rounded-full blur-3xl -z-0 animate-pulse delay-1000"></div>
+
+                    <div className="relative z-10 overflow-y-auto">
+
+                      {/* Cabeçalho com Toggle Premium */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-fuchsia-600 rounded-2xl  opacity-75 animate-pulse"></div>
+                            <div className="relative bg-gradient-to-r from-violet-500 to-fuchsia-600 p-3 rounded-2xl ">
+                              <svg
+                                className="w-7 h-7 text-white"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2.5}
+                                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                                />
+                              </svg>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold bg-gradient-to-r from-violet-700 to-fuchsia-700 bg-clip-text text-transparent">
+                              Notificar atendente
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-1 font-medium">
+                              Quando o cliente receber esse disparo o atendente será notificado
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Toggle Switch Premium */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotificacaoAtivo(!notificacaoAtivo);
+                          }}
+                          className={`group relative inline-flex h-10 w-20 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 ${
+                              notificacaoAtivo
+                              ? "bg-gradient-to-r from-violet-500 to-fuchsia-600 focus:ring-fuchsia-300 shadow-lg shadow-fuchsia-500/50"
+                              : "bg-gray-300 focus:ring-gray-200 hover:bg-gray-400"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-8 w-8 transform rounded-full bg-white shadow-lg transition-all duration-300 cursor-pointer ${
+                              notificacaoAtivo
+                                ? "translate-x-5"
+                                : "translate-x-1"
+                            }`}
+                          ></span>
+                        </button>
+                      </div>
+
+                       {/* Conteúdo do Fracionamento com Animação */}
+                      <div
+                        className={`transition-all duration-500 ease-in-out ${
+                          notificacaoAtivo
+                            ? "max-h-[1000px] opacity-100"
+                            : "max-h-0 opacity-0 overflow-hidden"
+                        }`}
+                      >
+                        {notificacaoAtivo && (
+                          <div className="space-y-6 pt-4">
+                           {etapa?.name && (
+                            <div className="grid w-full gap-1">
+                              <label className="block font-medium text-gray-500">
+                              Atendente a ser notificado:{" "}
+                                <span className="text-red-500">*</span>
+                              </label>
+
+                              {atendentes.map((atendente) => {
+                                const isSelected = atendenteNotificacao === atendente.id;
+
+                                // Verificar se atendente tem conexão ativa (waba_id)
+                                const hasConnection = Boolean(atendente.waba_id);
+
+                                // Verificar se o template está aprovado para o waba_id deste atendente
+                                let templateApprovedForAtendente = true;
+                                let templateStatusMessage = "";
+
+                                if (template && atendente.waba_id) {
+                                  // Verificar se o waba_id está na lista de waba_ids do template
+                                  const wabaIds = template.waba_ids || [template.waba_id];
+                                  const wabaIndex = wabaIds.indexOf(atendente.waba_id);
+
+                                  if (wabaIndex === -1) {
+                                    // waba_id não encontrado na lista
+                                    templateApprovedForAtendente = false;
+                                    templateStatusMessage =
+                                      "Template não disponível nesta conexão";
+                                  } else {
+                                    // Verificar status específico para este waba_id
+                                    const statuses = template.statuses || [template.status];
+                                    const statusForWaba = statuses[wabaIndex];
+
+                                    if (statusForWaba !== "APPROVED") {
+                                      templateApprovedForAtendente = false;
+                                      templateStatusMessage =
+                                        statusForWaba === "PENDING"
+                                          ? "Template pendente de aprovação nesta conexão"
+                                          : statusForWaba === "REJECTED"
+                                          ? "Template rejeitado nesta conexão"
+                                          : "Template não aprovado nesta conexão";
+                                    }
+                                  }
+                                }
+
+                                // Verificar se atendente tem acesso ao template selecionado (ID do atendente)
+                                const isCompatible =
+                                  !template ||
+                                  (
+                                    template.atendente_ids || [template.atendente_id]
+                                  ).includes(atendente.id);
+
+                                // Verificar se atendente tem leads disponíveis
+                                const leadsDisponiveis =
+                                  Number(atendenteCounts[atendente.id]) || 0;
+                                const hasLeads = leadsDisponiveis > 0;
+
+                                // Atendente só pode ser selecionado se:
+                                // 1. Tiver conexão
+                                // 2. For compatível com template (ID)
+                                // 3. Template estiver aprovado para seu waba_id
+                                // 4. Tiver pelo menos 1 lead disponível
+                                const canSelect = hasConnection
+
+                                return (
+                                  <label
+                                    key={atendente.id}
+                                    className={`flex items-center gap-2 ${
+                                      canSelect
+                                        ? "cursor-pointer"
+                                        : "cursor-not-allowed opacity-50"
+                                    }`}
+                                    title={atendente.nome}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="atendente-notificacao"
+                                      checked={isSelected}
+                                      disabled={!canSelect}
+                                      onChange={() =>
+                                        setSelectedAtendenteNotificacao(atendente.id)
+                                      }
+                                      className="w-5 h-5"
+                                    />
+                                    <span className="text-black font-medium text-base">
+                                      {atendente.nome} ({atendente.email}
+                                      {atendente.telefone && ` - ${atendente.telefone}`})
+                                     
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                          </div>
+                        )}
+                      </div>
+
                     </div>
                   </div>
                 )}
