@@ -108,6 +108,7 @@ export default function Conexoes() {
         telefone: form.telefone,
         url: form.url,
         tipo: form.tipo,
+        categoria: form.categoria,
       };
       if (form.tipo === "Oficial") {
         // incluir whatsapp_number_id, waba_id e business_id para conexões oficiais
@@ -131,6 +132,7 @@ export default function Conexoes() {
         telefone: "",
         url: "",
         tipo: "Não oficial",
+        categoria: "Número atendente",
         whatsapp_number_id: "",
         waba_id: "",
         business_id: "",
@@ -277,6 +279,7 @@ export default function Conexoes() {
                 const waba_id = conn.waba_id ?? conn.wabaID ?? "";
                 const createdAt = conn.created_at ?? null;
                 const isOficial = tipo === "Oficial";
+                const categoria = conn.categoria ?? "atendente";
 
                 return (
                   <article
@@ -339,6 +342,12 @@ export default function Conexoes() {
                               Tipo:{" "}
                               <span className="font-medium text-slate-800">
                                 {tipo || "Não informado"}
+                              </span>
+                            </p>
+                            <p className="text-sm text-slate-600 mt-1">
+                              Categoria:{" "}
+                              <span className="font-medium text-slate-800">
+                                { categoria.charAt(0).toUpperCase() + categoria.slice(1) || "Não informado"}
                               </span>
                             </p>
                           </>
@@ -455,6 +464,18 @@ export default function Conexoes() {
             >
               <option>Não oficial</option>
               <option>Oficial</option>
+            </select>
+
+            <label className="block mb-2 text-sm text-slate-600">
+              Categoria do Whatsapp
+            </label>
+            <select
+              value={form.categoria}
+              onChange={(e) => setForm((s) => ({ ...s, categoria: e.target.value }))}
+              className="w-full mb-3 px-3 py-2 rounded-lg border border-slate-200 text-slate-800"
+            >
+              <option>Número principal</option>
+              <option>Número atendente</option>
             </select>
 
             {form.tipo === "Oficial" && (

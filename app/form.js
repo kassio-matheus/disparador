@@ -2,7 +2,7 @@
 
 import { deleteCookie } from "cookies-next";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import TemplatesPopup from "./TemplatePopup";
 import Link from "next/link";
 import Image from "next/image";
@@ -108,8 +108,15 @@ export default function Form() {
   const [horaInicio, setHoraInicio] = useState("");
   const [horaFim, setHoraFim] = useState("");
 
-  const [notificacaoAtivo, setNotificacaoAtivo] = useState(false)
-  const [atendenteNotificacao, setSelectedAtendenteNotificacao] = useState(null);
+  const [notificacaoAtivo, setNotificacaoAtivo] = useState(false);
+  const [atendenteNotificacao, setSelectedAtendenteNotificacao] =
+    useState(null);
+
+  const [principalConexao, setPrincipalConexao] = useState(null);
+  const [whatsappEnvio, setWhatsappEnvio] = useState({
+    value: undefined,
+    name: undefined,
+  });
 
   // useEffect para desabilitar fracionamento quando limites < 5
   useEffect(() => {
@@ -142,6 +149,51 @@ export default function Form() {
   // Configuração da API Facebook Graph API - TODO: mover para variáveis de ambiente (.env.local)
   const WHATSAPP_API_VERSION = "v24.0";
 
+  async function getPrincipalConexao() {
+    try {
+      const response = await fetch(
+        "https://frutosdoacai.up.railway.app/webhook/conexoes/principal",
+      );
+      if (!response.ok) {
+        setPrincipalConexao(null);
+        return;
+      }
+      const text = await response.text();
+      if (!text || text.trim() === "") {
+        setPrincipalConexao(null);
+        return;
+      }
+      const data = JSON.parse(text);
+
+      // Endpoint retorna array — pega o primeiro elemento
+      const conexao = Array.isArray(data) ? data[0] : data;
+
+      if (!conexao?.waba_id) {
+        setPrincipalConexao(null);
+        return;
+      }
+      setPrincipalConexao(conexao);
+    } catch (error) {
+      console.error("Erro ao buscar conexão principal:", error);
+      setPrincipalConexao(null);
+    }
+  }
+
+  useEffect(() => {
+    getPrincipalConexao();
+  }, []);
+
+  const filteredTemplates = useMemo(() => {
+    if (whatsappEnvio?.value === "principal") {
+      if (!principalConexao?.waba_id) return [];
+      return templates.filter((tmpl) => {
+        const wabaIds = tmpl.waba_ids ?? (tmpl.waba_id ? [tmpl.waba_id] : []);
+        return wabaIds.includes(principalConexao.waba_id);
+      });
+    }
+    return templates;
+  }, [templates, whatsappEnvio?.value, principalConexao]);
+
   // Lista de atendentes com seus respectivos waba_ids
   // TODO: Substituir por requisição ao backend quando tabela estiver pronta
   // Buscar atendentes do backend
@@ -149,7 +201,7 @@ export default function Form() {
     try {
       setLoadingAtendentes(true);
       const response = await fetch(
-        "https://frutosdoacai.up.railway.app/webhook/atendentes"
+        "https://frutosdoacai.up.railway.app/webhook/atendentes",
       );
 
       if (!response.ok) {
@@ -175,7 +227,7 @@ export default function Form() {
                     "Content-Type": "application/json",
                   },
                   body: JSON.stringify({ waba_id: atendente.waba_id }),
-                }
+                },
               );
 
               if (conexaoResponse.ok) {
@@ -186,7 +238,7 @@ export default function Form() {
             } catch (error) {
               console.error(
                 `Erro ao buscar telefone para waba_id ${atendente.waba_id}:`,
-                error
+                error,
               );
             }
           }
@@ -199,7 +251,7 @@ export default function Form() {
             telefone: telefone,
             token: token,
           };
-        })
+        }),
       );
 
       setAtendentes(formattedAtendentes);
@@ -259,6 +311,7 @@ export default function Form() {
       atendenteCounts,
       notificacaoAtivo,
       atendenteNotificacao,
+      whatsappEnvio,
     };
     setDisparos([estadoAtual]);
     setActiveDisparoIndex(0);
@@ -289,6 +342,7 @@ export default function Form() {
       hasName: false,
       atendenteCounts: {},
       notificacao: atendenteNotificacao,
+      whatsappEnvio: { value: undefined, name: undefined },
     };
     setDisparos([...disparos, novoDisparo]);
     setActiveDisparoIndex(disparos.length);
@@ -426,7 +480,7 @@ export default function Form() {
         alert(
           `Disparo ${
             i + 1
-          } está incompleto. Por favor, preencha todos os campos obrigatórios.`
+          } está incompleto. Por favor, preencha todos os campos obrigatórios.`,
         );
         return;
       }
@@ -434,7 +488,7 @@ export default function Form() {
       // Montar payload do disparo individual
       const etapaFinal = getEtapaFinal(
         disparo.funil.value,
-        disparo.etapa.value
+        disparo.etapa.value,
       );
 
       payloads.push({
@@ -471,7 +525,8 @@ export default function Form() {
               hora_fim: disparo.horaFim || "",
             }
           : { ativo: false },
-        notificacao: disparo.atendenteNotificacao
+        notificacao: disparo.atendenteNotificacao,
+        whatsapp_envio: disparo.whatsappEnvio,
       });
     }
 
@@ -492,12 +547,12 @@ export default function Form() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payloadFinal),
-        }
+        },
       );
 
       if (response.ok) {
         alert(
-          `✅ Todos os ${disparos.length} disparos foram enviados com sucesso!`
+          `✅ Todos os ${disparos.length} disparos foram enviados com sucesso!`,
         );
         router.push("/disparos");
       } else {
@@ -505,7 +560,7 @@ export default function Form() {
         alert(
           `❌ Erro ao enviar os disparos: ${
             errorData.error || "O servidor retornou um erro."
-          }`
+          }`,
         );
       }
     } catch (err) {
@@ -514,47 +569,6 @@ export default function Form() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const atualizarDisparoAtivo = (campo, valor) => {
-    if (creationMode === "multiple") {
-      const novosDisparos = [...disparos];
-      novosDisparos[activeDisparoIndex] = {
-        ...novosDisparos[activeDisparoIndex],
-        [campo]: valor,
-      };
-      setDisparos(novosDisparos);
-    }
-  };
-
-  const getCurrentDisparoData = () => {
-    if (creationMode === "multiple" && disparos[activeDisparoIndex]) {
-      return disparos[activeDisparoIndex];
-    }
-    return {
-      funil,
-      etapas,
-      etapa,
-      momento,
-      agendamento,
-      quantidade,
-      limites,
-      modoLimite,
-      limitesIndividuais,
-      template,
-      selectedAtendentes,
-      fracionamentoAtivo,
-      leadsPorLote,
-      pausaMinutos,
-      pausaSegundos,
-      pausaDias,
-      pausaHoras,
-      horaInicio,
-      horaFim,
-      hasName,
-      notificacaoAtivo,
-      atendenteNotificacao
-    };
   };
 
   async function getEtapas() {
@@ -592,7 +606,7 @@ export default function Form() {
         body: JSON.stringify({
           id: funil.value,
         }),
-      }
+      },
     );
 
     const data = await response.json();
@@ -623,7 +637,7 @@ export default function Form() {
         body: JSON.stringify({
           id: etapa.value,
         }),
-      }
+      },
     );
 
     const data = await response.json();
@@ -646,7 +660,7 @@ export default function Form() {
             user_id: userId,
             etapa_id: etapa.value,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -670,7 +684,7 @@ export default function Form() {
       try {
         // Buscar contagem para TODOS os atendentes
         const promises = atendentes.map((atendente) =>
-          getLimiteAtendente(atendente.id)
+          getLimiteAtendente(atendente.id),
         );
         const results = await Promise.all(promises);
         if (!mounted) return;
@@ -749,115 +763,138 @@ export default function Form() {
     fetchingRef.current = true;
     setLoading(true);
 
-    // Limpa templates apenas na primeira busca (sem cursor)
     if (!cursor) {
       setTemplates([]);
     }
 
     try {
       const allTemplates = [];
-      const errors = [];
       let globalNextCursor = null;
 
-      // Filtrar apenas atendentes que possuem waba_id válido
-      const atendentesComWaba = atendentes.filter(
-        (atendente) => atendente.waba_id && atendente.waba_id.trim() !== ""
-      );
+      if (whatsappEnvio?.value === "principal") {
+        // Busca apenas da conexão principal
+        if (!principalConexao?.waba_id) {
+          setTemplates([]);
+          return;
+        }
 
-      // Buscar templates de todos os waba_ids dos atendentes
-      await Promise.all(
-        atendentesComWaba.map(async (atendente) => {
-          try {
-            let url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${atendente.waba_id}/message_templates`;
+        let url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${principalConexao.waba_id}/message_templates`;
+        if (cursor) url += `?after=${cursor}`;
 
-            // Adicionar cursor se fornecido (para paginação)
-            if (cursor) {
-              url += `?after=${cursor}`;
-            }
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${principalConexao.token}`,
+            "Content-Type": "application/json",
+          },
+        });
 
-            const response = await fetch(url, {
-              method: "GET",
-              headers: {
-                Authorization: `Bearer ${atendente.token}`,
-                "Content-Type": "application/json",
-              },
-            });
+        if (!response.ok) throw new Error(`Erro ${response.status}`);
 
-            if (!response.ok) {
-              throw new Error(
-                `Erro ${response.status} ao buscar templates de ${atendente.nome}`
+        const data = await response.json();
+
+        if (data?.data && Array.isArray(data.data)) {
+          allTemplates.push(
+            ...data.data.map((tmpl) => ({
+              ...tmpl,
+              waba_id: principalConexao.waba_id,
+            })),
+          );
+        }
+
+        if (data?.paging?.cursors?.after) {
+          globalNextCursor = data.paging.cursors.after;
+        }
+      } else {
+        // Busca de todos os atendentes (comportamento original)
+        const atendentesComWaba = atendentes.filter(
+          (a) => a.waba_id && a.waba_id.trim() !== "",
+        );
+
+        const errors = [];
+
+        await Promise.all(
+          atendentesComWaba.map(async (atendente) => {
+            try {
+              let url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${atendente.waba_id}/message_templates`;
+              if (cursor) url += `?after=${cursor}`;
+
+              const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${atendente.token}`,
+                  "Content-Type": "application/json",
+                },
+              });
+
+              if (!response.ok)
+                throw new Error(
+                  `Erro ${response.status} ao buscar templates de ${atendente.nome}`,
+                );
+
+              const data = await response.json();
+
+              if (data?.data && Array.isArray(data.data)) {
+                allTemplates.push(
+                  ...data.data.map((tmpl) => ({
+                    ...tmpl,
+                    waba_id: atendente.waba_id,
+                    atendente_id: atendente.id,
+                    atendente_nome: atendente.nome,
+                  })),
+                );
+              }
+
+              if (data?.paging?.cursors?.after && !globalNextCursor) {
+                globalNextCursor = data.paging.cursors.after;
+              }
+            } catch (error) {
+              console.error(
+                `Erro ao buscar templates de ${atendente.nome}:`,
+                error,
               );
+              errors.push({ atendente: atendente.nome, error: error.message });
             }
+          }),
+        );
 
-            const data = await response.json();
+        if (errors.length > 0) {
+          console.warn("Alguns templates não puderam ser carregados:", errors);
+        }
+      }
 
-            if (data?.data && Array.isArray(data.data)) {
-              // Marcar cada template com o waba_id e atendente de origem
-              const templatesWithOwner = data.data.map((tmpl) => ({
-                ...tmpl,
-                waba_id: atendente.waba_id,
-                atendente_id: atendente.id,
-                atendente_nome: atendente.nome,
-              }));
-              allTemplates.push(...templatesWithOwner);
-            }
-
-            // Capturar cursor de paginação se disponível
-            if (data?.paging?.cursors?.after && !globalNextCursor) {
-              globalNextCursor = data.paging.cursors.after;
-            }
-          } catch (error) {
-            console.error(
-              `Erro ao buscar templates de ${atendente.nome}:`,
-              error
-            );
-            errors.push({ atendente: atendente.nome, error: error.message });
-          }
-        })
-      );
-
-      // Agrupar templates por nome (mesmo template pode estar em múltiplos waba_ids)
+      // Agrupar por nome (evitar duplicatas entre waba_ids)
       const templatesMap = new Map();
 
-      // Adicionar templates existentes ao mapa se estiver paginando
       if (cursor && templates.length > 0) {
-        templates.forEach((tmpl) => {
-          const key = tmpl.name; // Usar apenas nome como chave
-          templatesMap.set(key, { ...tmpl });
-        });
+        templates.forEach((tmpl) => templatesMap.set(tmpl.name, { ...tmpl }));
       }
 
       allTemplates.forEach((tmpl) => {
-        const key = tmpl.name; // Usar apenas nome como chave
+        const key = tmpl.name;
         if (templatesMap.has(key)) {
           const existing = templatesMap.get(key);
-          // Adicionar waba_id, atendente e status aos arrays
           if (!existing.waba_ids) {
             existing.waba_ids = [existing.waba_id];
             existing.atendente_ids = [existing.atendente_id];
             existing.atendente_nomes = [existing.atendente_nome];
-            existing.statuses = [existing.status]; // Preservar status por conexão
+            existing.statuses = [existing.status];
           }
           existing.waba_ids.push(tmpl.waba_id);
-          existing.atendente_ids.push(tmpl.atendente_id);
-          existing.atendente_nomes.push(tmpl.atendente_nome);
-          existing.statuses.push(tmpl.status); // Adicionar status desta conexão
+          existing.atendente_ids?.push(tmpl.atendente_id);
+          existing.atendente_nomes?.push(tmpl.atendente_nome);
+          existing.statuses.push(tmpl.status);
         } else {
           templatesMap.set(key, { ...tmpl });
         }
       });
 
-      const uniqueTemplates = Array.from(templatesMap.values());
-      setTemplates(uniqueTemplates);
-      setNextCursor(globalNextCursor); // Atualizar cursor para próxima página
-
-      if (errors.length > 0) {
-        console.warn("Alguns templates não puderam ser carregados:", errors);
-      }
+      setTemplates(Array.from(templatesMap.values()));
+      setNextCursor(globalNextCursor);
     } catch (error) {
       console.error("Erro ao buscar templates:", error);
       alert(
-        "Erro ao carregar templates. Verifique a conexão e tente novamente."
+        "Erro ao carregar templates. Verifique a conexão e tente novamente.",
       );
     } finally {
       setLoading(false);
@@ -876,7 +913,7 @@ export default function Form() {
             getTemplates(nextCursor);
           }
         },
-        { threshold: 1.0 }
+        { threshold: 1.0 },
       );
 
       observer.observe(loader.current);
@@ -900,10 +937,16 @@ export default function Form() {
         template.atendente_id,
       ];
       setSelectedAtendentes((prev) =>
-        prev.filter((id) => compatibleAtendentes.includes(id))
+        prev.filter((id) => compatibleAtendentes.includes(id)),
       );
     }
   }, [template]);
+
+  useEffect(() => {
+    setTemplate(undefined);
+    setTemplates([]);
+    fetchedRef.current = false;
+  }, [whatsappEnvio?.value]);
 
   // ========== SINCRONIZAÇÃO COM MODO MÚLTIPLO ==========
 
@@ -933,8 +976,9 @@ export default function Form() {
       setHoraFim(disparo.horaFim);
       setHasName(disparo.hasName || false);
       setAtendenteCounts(disparo.atendenteCounts || {});
-      setNotificacaoAtivo(disparo.notificacaoAtivo)
-      setSelectedAtendenteNotificacao(null)
+      setNotificacaoAtivo(disparo.notificacaoAtivo);
+      setSelectedAtendenteNotificacao(null);
+      setWhatsappEnvio(disparo.whatsappEnvio);
       // Aguarda próximo render para liberar
       setTimeout(() => {
         isLoadingDisparoData.current = false;
@@ -973,7 +1017,8 @@ export default function Form() {
         hasName,
         atendenteCounts,
         notificacaoAtivo,
-        atendenteNotificacao
+        atendenteNotificacao,
+        whatsappEnvio,
       };
       if (JSON.stringify(novosDisparos) !== JSON.stringify(disparos)) {
         setDisparos(novosDisparos);
@@ -1002,7 +1047,8 @@ export default function Form() {
     hasName,
     atendenteCounts,
     notificacaoAtivo,
-    atendenteNotificacao
+    atendenteNotificacao,
+    whatsappEnvio,
   ]);
 
   // mapeia funil + etapa para etapa_final
@@ -1105,7 +1151,7 @@ export default function Form() {
         if (limite > maxDisponivel) {
           const atendente = atendentes.find((a) => a.id === atendenteId);
           alert(
-            `O limite definido para ${atendente?.nome} (${limite}) excede o máximo disponível (${maxDisponivel}).`
+            `O limite definido para ${atendente?.nome} (${limite}) excede o máximo disponível (${maxDisponivel}).`,
           );
           return;
         }
@@ -1115,7 +1161,7 @@ export default function Form() {
     // Validar quantidade no modo geral
     if (modoLimite === "geral" && quantidade && Number(quantidade) > limites) {
       alert(
-        `A quantidade solicitada (${quantidade}) excede o limite disponível (${limites}).`
+        `A quantidade solicitada (${quantidade}) excede o limite disponível (${limites}).`,
       );
       return;
     }
@@ -1124,7 +1170,7 @@ export default function Form() {
     if (fracionamentoAtivo) {
       if (!leadsPorLote || leadsPorLote === "" || Number(leadsPorLote) <= 0) {
         alert(
-          "O campo 'Leads por Lote' é obrigatório quando o fracionamento está ativo!"
+          "O campo 'Leads por Lote' é obrigatório quando o fracionamento está ativo!",
         );
         return;
       }
@@ -1145,7 +1191,7 @@ export default function Form() {
         Number(pausaSegundos || 0);
       if (tempoTotal <= 0) {
         alert(
-          "O campo 'Tempo de Pausa' é obrigatório quando o fracionamento está ativo! Defina ao menos horas, minutos ou segundos."
+          "O campo 'Tempo de Pausa' é obrigatório quando o fracionamento está ativo! Defina ao menos horas, minutos ou segundos.",
         );
         return;
       }
@@ -1167,25 +1213,27 @@ export default function Form() {
 
       if (Number(leadsPorLote) > totalLeads) {
         alert(
-          `A quantidade de leads por lote (${leadsPorLote}) não pode ser maior que o total de leads (${totalLeads}).`
+          `A quantidade de leads por lote (${leadsPorLote}) não pode ser maior que o total de leads (${totalLeads}).`,
         );
         return;
       }
     }
 
     // Validar que atendentes selecionados são compatíveis com o template
-    const compatibleAtendentes = template.atendente_ids || [
-      template.atendente_id,
-    ];
-    const invalidAtendentes = selectedAtendentes.filter(
-      (id) => !compatibleAtendentes.includes(id)
-    );
-
-    if (invalidAtendentes.length > 0) {
-      alert(
-        "Alguns atendentes selecionados não têm acesso a este template. Por favor, revise sua seleção."
+    if (whatsappEnvio?.value !== "principal") {
+      const compatibleAtendentes = template.atendente_ids || [
+        template.atendente_id,
+      ];
+      const invalidAtendentes = selectedAtendentes.filter(
+        (id) => !compatibleAtendentes.includes(id),
       );
-      return;
+
+      if (invalidAtendentes.length > 0) {
+        alert(
+          "Alguns atendentes selecionados não têm acesso a este template. Por favor, revise sua seleção.",
+        );
+        return;
+      }
     }
 
     // calcula etapa_final baseado em funil + etapa
@@ -1226,7 +1274,8 @@ export default function Form() {
         : {
             ativo: false,
           },
-      notificacao: atendenteNotificacao
+      notificacao: atendenteNotificacao,
+      whatsapp_envio: whatsappEnvio.value,
     };
 
     try {
@@ -1237,7 +1286,7 @@ export default function Form() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -1261,25 +1310,25 @@ export default function Form() {
     creationMode === "single"
       ? Boolean(
           funil?.value &&
-            etapa?.value &&
-            template &&
-            momento?.value &&
-            selectedAtendentes.length > 0 &&
-            quantidade !== "" &&
-            (quantidade > 0 || (quantidade === 0 && limites > 0))
+          etapa?.value &&
+          template &&
+          momento?.value &&
+          selectedAtendentes.length > 0 &&
+          quantidade !== "" &&
+          (quantidade > 0 || (quantidade === 0 && limites > 0)),
         )
       : Boolean(
           disparos.length > 0 &&
-            disparos.every(
-              (d) =>
-                d.funil?.value &&
-                d.etapa?.value &&
-                d.template &&
-                d.momento?.value &&
-                d.selectedAtendentes?.length > 0 &&
-                d.quantidade !== "" &&
-                (d.quantidade > 0 || (d.quantidade === 0 && d.limites > 0))
-            )
+          disparos.every(
+            (d) =>
+              d.funil?.value &&
+              d.etapa?.value &&
+              d.template &&
+              d.momento?.value &&
+              d.selectedAtendentes?.length > 0 &&
+              d.quantidade !== "" &&
+              (d.quantidade > 0 || (d.quantidade === 0 && d.limites > 0)),
+          ),
         );
 
   return (
@@ -1572,10 +1621,10 @@ export default function Form() {
                       draggedIndex === index
                         ? "opacity-50 scale-95"
                         : dragOverIndex === index
-                        ? "border-green-500 bg-green-50 scale-105 shadow-2xl ring-4 ring-green-300"
-                        : activeDisparoIndex === index
-                        ? "border-fuchsia-500 bg-gradient-to-br from-fuchsia-50 to-purple-50 shadow-xl scale-[1.02] ring-4 ring-fuchsia-200"
-                        : "border-gray-200 bg-white hover:border-fuchsia-300 hover:shadow-lg hover:scale-[1.01]"
+                          ? "border-green-500 bg-green-50 scale-105 shadow-2xl ring-4 ring-green-300"
+                          : activeDisparoIndex === index
+                            ? "border-fuchsia-500 bg-gradient-to-br from-fuchsia-50 to-purple-50 shadow-xl scale-[1.02] ring-4 ring-fuchsia-200"
+                            : "border-gray-200 bg-white hover:border-fuchsia-300 hover:shadow-lg hover:scale-[1.01]"
                     }`}
                     title="Arraste para reordenar"
                   >
@@ -1813,7 +1862,7 @@ export default function Form() {
                                 value={delayDias}
                                 onChange={(e) =>
                                   setDelayDias(
-                                    Math.max(0, Number(e.target.value))
+                                    Math.max(0, Number(e.target.value)),
                                   )
                                 }
                                 className="w-full border-2 border-indigo-100 rounded-xl px-4 py-2 text-indigo-900 font-bold text-center focus:border-indigo-500 focus:outline-none transition-all"
@@ -1833,8 +1882,8 @@ export default function Form() {
                                   setDelayHoras(
                                     Math.max(
                                       0,
-                                      Math.min(23, Number(e.target.value))
-                                    )
+                                      Math.min(23, Number(e.target.value)),
+                                    ),
                                   )
                                 }
                                 className="w-full border-2 border-indigo-100 rounded-xl px-4 py-2 text-indigo-900 font-bold text-center focus:border-indigo-500 focus:outline-none transition-all"
@@ -1854,8 +1903,8 @@ export default function Form() {
                                   setDelayMinutos(
                                     Math.max(
                                       0,
-                                      Math.min(59, Number(e.target.value))
-                                    )
+                                      Math.min(59, Number(e.target.value)),
+                                    ),
                                   )
                                 }
                                 className="w-full border-2 border-indigo-100 rounded-xl px-4 py-2 text-indigo-900 font-bold text-center focus:border-indigo-500 focus:outline-none transition-all"
@@ -1875,8 +1924,8 @@ export default function Form() {
                                   setDelaySegundos(
                                     Math.max(
                                       0,
-                                      Math.min(59, Number(e.target.value))
-                                    )
+                                      Math.min(59, Number(e.target.value)),
+                                    ),
                                   )
                                 }
                                 className="w-full border-2 border-indigo-100 rounded-xl px-4 py-2 text-indigo-900 font-bold text-center focus:border-indigo-500 focus:outline-none transition-all"
@@ -1903,7 +1952,7 @@ export default function Form() {
                       !d.template ||
                       !d.momento?.value ||
                       !d.selectedAtendentes ||
-                      d.selectedAtendentes.length === 0
+                      d.selectedAtendentes.length === 0,
                   )}
                   className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
                     disparos.some(
@@ -1913,7 +1962,7 @@ export default function Form() {
                         !d.template ||
                         !d.momento?.value ||
                         !d.selectedAtendentes ||
-                        d.selectedAtendentes.length === 0
+                        d.selectedAtendentes.length === 0,
                     )
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed opacity-50"
                       : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg hover:shadow-xl"
@@ -2103,6 +2152,58 @@ export default function Form() {
                 </div>
               )}
 
+              {funil?.value && etapas.length !== 0 && (
+                <div className="grid w-full gap-1">
+                  <label className="block font-medium text-gray-500">
+                    Whatsapp de envio <span className="text-red-500">*</span>
+                  </label>
+
+                  <select
+                    value={whatsappEnvio?.value || ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        if (e.target.value === "principal") {
+                          setWhatsappEnvio({
+                            value: e.target.value,
+                            name: "Envio único",
+                          });
+                        } else if (e.target.value === "atendente") {
+                          setWhatsappEnvio({
+                            value: e.target.value,
+                            name: "Envio individual",
+                          });
+                        } else {
+                          setWhatsappEnvio({
+                            value: e.target.value,
+                            name: "Não identificado",
+                          });
+                        }
+                      } else {
+                        setWhatsappEnvio({
+                          value: undefined,
+                          name: undefined,
+                        });
+                      }
+                    }}
+                    className="w-full p-2 border border-gray-300 rounded-xl text-black bg-white focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+                  >
+                    <option value="">Clique aqui para selecionar</option>
+                    <option value="principal">Envio único - Principal</option>
+                    <option value="atendente">
+                      Envio individual - Atendente
+                    </option>
+                  </select>
+
+                  {whatsappEnvio?.value === "principal" &&
+                    !principalConexao && (
+                      <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 mt-1">
+                        Nenhum WhatsApp principal configurado. Configure uma
+                        conexão principal para usar esta opção.
+                      </p>
+                    )}
+                </div>
+              )}
+
               {/* Se momento for agendado, botão para abrir seletor de data/hora */}
               {funil?.value &&
                 etapas.length !== 0 &&
@@ -2122,12 +2223,12 @@ export default function Form() {
                           // abrir o picker ao mostrar
                           setTimeout(
                             () => dateInputRef.current?.showPicker?.(),
-                            50
+                            50,
                           );
                           // foco no input (alguns browsers abrirão o calendário)
                           setTimeout(
                             () => dateInputRef.current?.focus?.(),
-                            100
+                            100,
                           );
                         }}
                         className="w-full p-3 text-base bg-fuchsia-100 border border-fuchsia-200 text-black font-medium rounded-xl cursor-pointer hover:opacity-90"
@@ -2193,50 +2294,53 @@ export default function Form() {
                   </div>
                 )}
 
-              {funil?.value && etapas.length !== 0 && (
-                <div className="grid w-full gap-1">
-                  <TemplatesPopup
-                    templatePopup={templatePopup}
-                    setTemplatePopup={setTemplatePopup}
-                    templates={templates}
-                    nextCursor={nextCursor}
-                    loading={loading}
-                    loader={loader}
-                    setTemplate={setTemplate}
-                    atendentes={atendentes}
-                  />
+              {funil?.value &&
+                etapas.length !== 0 &&
+                (whatsappEnvio.value == "atendente" ||
+                  (whatsappEnvio.value == "principal" && principalConexao)) && (
+                  <div className="grid w-full gap-1">
+                    <TemplatesPopup
+                      templatePopup={templatePopup}
+                      setTemplatePopup={setTemplatePopup}
+                      templates={templates}
+                      nextCursor={nextCursor}
+                      loading={loading}
+                      loader={loader}
+                      setTemplate={setTemplate}
+                      atendentes={atendentes}
+                    />
 
-                  <label className="block font-medium text-gray-500">
-                    Template de envio <span className="text-red-500">*</span>
-                  </label>
+                    <label className="block font-medium text-gray-500">
+                      Template de envio <span className="text-red-500">*</span>
+                    </label>
 
-                  {template && (
-                    <button
-                      type="button"
-                      className="relative w-full p-3 text-base bg-fuchsia-50 mb-2 text-black font-medium rounded-xl"
-                    >
-                      {template.name}
-
-                      <span
-                        onClick={() => setTemplate(undefined)}
-                        className="absolute right-3 text-red-500 font-semibold text-xl cursor-pointer"
+                    {template && (
+                      <button
+                        type="button"
+                        className="relative w-full p-3 text-base bg-fuchsia-50 mb-2 text-black font-medium rounded-xl"
                       >
-                        x
-                      </span>
-                    </button>
-                  )}
+                        {template.name}
 
-                  <button
-                    onClick={() => setTemplatePopup(true)}
-                    type="button"
-                    className="w-full p-3 text-base bg-fuchsia-100 border border-fuchsia-200 text-black font-medium rounded-xl cursor-pointer hover:opacity-50"
-                  >
-                    {!template
-                      ? "Selecionar o template de envio"
-                      : "Selecionar outro template de envio"}
-                  </button>
-                </div>
-              )}
+                        <span
+                          onClick={() => setTemplate(undefined)}
+                          className="absolute right-3 text-red-500 font-semibold text-xl cursor-pointer"
+                        >
+                          x
+                        </span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => setTemplatePopup(true)}
+                      type="button"
+                      className="w-full p-3 text-base bg-fuchsia-100 border border-fuchsia-200 text-black font-medium rounded-xl cursor-pointer hover:opacity-50"
+                    >
+                      {!template
+                        ? "Selecionar o template de envio"
+                        : "Selecionar outro template de envio"}
+                    </button>
+                  </div>
+                )}
 
               {etapa?.name && (
                 <div className="grid w-full gap-1">
@@ -2247,28 +2351,28 @@ export default function Form() {
 
                   {atendentes.map((atendente) => {
                     const isSelected = selectedAtendentes.includes(
-                      atendente.id
+                      atendente.id,
                     );
 
-                    // Verificar se atendente tem conexão ativa (waba_id)
                     const hasConnection = Boolean(atendente.waba_id);
 
-                    // Verificar se o template está aprovado para o waba_id deste atendente
                     let templateApprovedForAtendente = true;
                     let templateStatusMessage = "";
 
-                    if (template && atendente.waba_id) {
-                      // Verificar se o waba_id está na lista de waba_ids do template
+                    // Quando principal, ignora verificação de template por conexão do atendente
+                    if (
+                      whatsappEnvio?.value !== "principal" &&
+                      template &&
+                      atendente.waba_id
+                    ) {
                       const wabaIds = template.waba_ids || [template.waba_id];
                       const wabaIndex = wabaIds.indexOf(atendente.waba_id);
 
                       if (wabaIndex === -1) {
-                        // waba_id não encontrado na lista
                         templateApprovedForAtendente = false;
                         templateStatusMessage =
                           "Template não disponível nesta conexão";
                       } else {
-                        // Verificar status específico para este waba_id
                         const statuses = template.statuses || [template.status];
                         const statusForWaba = statuses[wabaIndex];
 
@@ -2278,29 +2382,24 @@ export default function Form() {
                             statusForWaba === "PENDING"
                               ? "Template pendente de aprovação nesta conexão"
                               : statusForWaba === "REJECTED"
-                              ? "Template rejeitado nesta conexão"
-                              : "Template não aprovado nesta conexão";
+                                ? "Template rejeitado nesta conexão"
+                                : "Template não aprovado nesta conexão";
                         }
                       }
                     }
 
-                    // Verificar se atendente tem acesso ao template selecionado (ID do atendente)
+                    // Quando principal, ignora compatibilidade por ID de atendente
                     const isCompatible =
+                      whatsappEnvio?.value === "principal" ||
                       !template ||
                       (
                         template.atendente_ids || [template.atendente_id]
                       ).includes(atendente.id);
 
-                    // Verificar se atendente tem leads disponíveis
                     const leadsDisponiveis =
                       Number(atendenteCounts[atendente.id]) || 0;
                     const hasLeads = leadsDisponiveis > 0;
 
-                    // Atendente só pode ser selecionado se:
-                    // 1. Tiver conexão
-                    // 2. For compatível com template (ID)
-                    // 3. Template estiver aprovado para seu waba_id
-                    // 4. Tiver pelo menos 1 lead disponível
                     const canSelect =
                       hasConnection &&
                       isCompatible &&
@@ -2319,12 +2418,12 @@ export default function Form() {
                           !hasConnection
                             ? `${atendente.nome} não possui conexão ativa`
                             : !hasLeads
-                            ? `${atendente.nome} não possui leads disponíveis nesta etapa`
-                            : !templateApprovedForAtendente
-                            ? templateStatusMessage
-                            : !isCompatible
-                            ? `${atendente.nome} não tem acesso ao template selecionado`
-                            : `${atendente.nome} - ${atendente.email}`
+                              ? `${atendente.nome} não possui leads disponíveis nesta etapa`
+                              : !templateApprovedForAtendente
+                                ? templateStatusMessage
+                                : !isCompatible
+                                  ? `${atendente.nome} não tem acesso ao template selecionado`
+                                  : `${atendente.nome} - ${atendente.email}`
                         }
                       >
                         <input
@@ -2334,7 +2433,7 @@ export default function Form() {
                           onChange={() => {
                             if (isSelected) {
                               setSelectedAtendentes((prev) =>
-                                prev.filter((id) => id !== atendente.id)
+                                prev.filter((id) => id !== atendente.id),
                               );
                             } else {
                               setSelectedAtendentes((prev) => [
@@ -2363,12 +2462,16 @@ export default function Form() {
                               ⚠️ Sem leads disponíveis
                             </span>
                           )}
-                          {hasConnection && !templateApprovedForAtendente && (
-                            <span className="text-red-500 text-xs ml-2 font-semibold">
-                              ⚠️ Template não disponível nesta conexão
-                            </span>
-                          )}
-                          {hasConnection &&
+                          {/* Badges de template só aparecem quando não for principal */}
+                          {whatsappEnvio?.value !== "principal" &&
+                            hasConnection &&
+                            !templateApprovedForAtendente && (
+                              <span className="text-red-500 text-xs ml-2 font-semibold">
+                                ⚠️ Template não disponível nesta conexão
+                              </span>
+                            )}
+                          {whatsappEnvio?.value !== "principal" &&
+                            hasConnection &&
                             templateApprovedForAtendente &&
                             !isCompatible && (
                               <span className="text-red-500 text-xs ml-2">
@@ -2491,7 +2594,7 @@ export default function Form() {
                     <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-gray-200 max-h-80 overflow-y-auto">
                       {selectedAtendentes.map((atendenteId) => {
                         const atendente = atendentes.find(
-                          (a) => a.id === atendenteId
+                          (a) => a.id === atendenteId,
                         );
                         if (!atendente) return null;
 
@@ -2551,7 +2654,7 @@ export default function Form() {
                           selectedAtendentes.forEach((id) => {
                             const limite = Number(limitesIndividuais[id] || 0);
                             const maxDisponivel = Number(
-                              atendenteCounts[id] || 0
+                              atendenteCounts[id] || 0,
                             );
                             // Se limite é 0, conta como todos os leads daquele atendente
                             total += limite === 0 ? maxDisponivel : limite;
@@ -2734,8 +2837,8 @@ export default function Form() {
                             limites < 5
                               ? "bg-gray-200 cursor-not-allowed opacity-50"
                               : fracionamentoAtivo
-                              ? "bg-gradient-to-r from-violet-500 to-fuchsia-600 focus:ring-fuchsia-300 shadow-lg shadow-fuchsia-500/50"
-                              : "bg-gray-300 focus:ring-gray-200 hover:bg-gray-400"
+                                ? "bg-gradient-to-r from-violet-500 to-fuchsia-600 focus:ring-fuchsia-300 shadow-lg shadow-fuchsia-500/50"
+                                : "bg-gray-300 focus:ring-gray-200 hover:bg-gray-400"
                           }`}
                         >
                           <span
@@ -2813,7 +2916,7 @@ export default function Form() {
                                         Math.round(numVal / 5) * 5;
                                       const adjusted = Math.max(
                                         5,
-                                        Math.min(rounded, limites)
+                                        Math.min(rounded, limites),
                                       );
                                       setLeadsPorLote(adjusted.toString());
                                     }
@@ -3069,22 +3172,22 @@ export default function Form() {
                                                         const limite = Number(
                                                           limitesIndividuais[
                                                             id
-                                                          ] || 0
+                                                          ] || 0,
                                                         );
                                                         const maxDisponivel =
                                                           Number(
                                                             atendenteCounts[
                                                               id
-                                                            ] || 0
+                                                            ] || 0,
                                                           );
                                                         total +=
                                                           limite === 0
                                                             ? maxDisponivel
                                                             : limite;
-                                                      }
+                                                      },
                                                     );
                                                     return total;
-                                                  })()) / Number(leadsPorLote)
+                                                  })()) / Number(leadsPorLote),
                                             )}{" "}
                                             lotes
                                           </p>
@@ -3113,10 +3216,10 @@ export default function Form() {
                                             {(() => {
                                               const h = Number(pausaHoras || 0);
                                               const m = Number(
-                                                pausaMinutos || 0
+                                                pausaMinutos || 0,
                                               );
                                               const s = Number(
-                                                pausaSegundos || 0
+                                                pausaSegundos || 0,
                                               );
                                               const parts = [];
                                               if (h > 0) parts.push(`${h}h`);
@@ -3164,17 +3267,16 @@ export default function Form() {
                   </div>
                 )}
 
-               {/* Notificar membro */}
+              {/* Notificar membro */}
               {funil?.value &&
                 etapas.length !== 0 &&
-                selectedAtendentes.length > 0 && (
+                selectedAtendentes.length > 0 && whatsappEnvio.value == "principal" &&  (
                   <div className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-fuchsia-50 to-purple-50 rounded-3xl border-2 border-violet-200 p-4 transition-all duration-300">
                     {/* Decoração de fundo animada */}
                     <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-fuchsia-200/30 to-purple-300/30 rounded-full blur-3xl -z-0 animate-pulse"></div>
                     <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-violet-200/30 to-pink-300/30 rounded-full blur-3xl -z-0 animate-pulse delay-1000"></div>
 
                     <div className="relative z-10 overflow-y-auto">
-
                       {/* Cabeçalho com Toggle Premium */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -3201,7 +3303,8 @@ export default function Form() {
                               Notificar atendente
                             </h3>
                             <p className="text-sm text-gray-600 mt-1 font-medium">
-                              Quando o cliente receber esse disparo o atendente será notificado
+                              Quando o cliente receber esse disparo o atendente
+                              será notificado
                             </p>
                           </div>
                         </div>
@@ -3213,7 +3316,7 @@ export default function Form() {
                             setNotificacaoAtivo(!notificacaoAtivo);
                           }}
                           className={`group relative inline-flex h-10 w-20 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 ${
-                              notificacaoAtivo
+                            notificacaoAtivo
                               ? "bg-gradient-to-r from-violet-500 to-fuchsia-600 focus:ring-fuchsia-300 shadow-lg shadow-fuchsia-500/50"
                               : "bg-gray-300 focus:ring-gray-200 hover:bg-gray-400"
                           }`}
@@ -3228,7 +3331,7 @@ export default function Form() {
                         </button>
                       </div>
 
-                       {/* Conteúdo do Fracionamento com Animação */}
+                      {/* Conteúdo do Fracionamento com Animação */}
                       <div
                         className={`transition-all duration-500 ease-in-out ${
                           notificacaoAtivo
@@ -3238,103 +3341,116 @@ export default function Form() {
                       >
                         {notificacaoAtivo && (
                           <div className="space-y-6 pt-4">
-                           {etapa?.name && (
-                            <div className="grid w-full gap-1">
-                              <label className="block font-medium text-gray-500">
-                              Atendente a ser notificado:{" "}
-                                <span className="text-red-500">*</span>
-                              </label>
+                            {etapa?.name && (
+                              <div className="grid w-full gap-1">
+                                <label className="block font-medium text-gray-500">
+                                  Atendente a ser notificado:{" "}
+                                  <span className="text-red-500">*</span>
+                                </label>
 
-                              {atendentes.map((atendente) => {
-                                const isSelected = atendenteNotificacao === atendente.id;
+                                {atendentes.map((atendente) => {
+                                  const isSelected =
+                                    atendenteNotificacao === atendente.id;
 
-                                // Verificar se atendente tem conexão ativa (waba_id)
-                                const hasConnection = Boolean(atendente.waba_id);
+                                  // Verificar se atendente tem conexão ativa (waba_id)
+                                  const hasConnection = Boolean(
+                                    atendente.waba_id,
+                                  );
 
-                                // Verificar se o template está aprovado para o waba_id deste atendente
-                                let templateApprovedForAtendente = true;
-                                let templateStatusMessage = "";
+                                  // Verificar se o template está aprovado para o waba_id deste atendente
+                                  let templateApprovedForAtendente = true;
+                                  let templateStatusMessage = "";
 
-                                if (template && atendente.waba_id) {
-                                  // Verificar se o waba_id está na lista de waba_ids do template
-                                  const wabaIds = template.waba_ids || [template.waba_id];
-                                  const wabaIndex = wabaIds.indexOf(atendente.waba_id);
+                                  if (template && atendente.waba_id) {
+                                    // Verificar se o waba_id está na lista de waba_ids do template
+                                    const wabaIds = template.waba_ids || [
+                                      template.waba_id,
+                                    ];
+                                    const wabaIndex = wabaIds.indexOf(
+                                      atendente.waba_id,
+                                    );
 
-                                  if (wabaIndex === -1) {
-                                    // waba_id não encontrado na lista
-                                    templateApprovedForAtendente = false;
-                                    templateStatusMessage =
-                                      "Template não disponível nesta conexão";
-                                  } else {
-                                    // Verificar status específico para este waba_id
-                                    const statuses = template.statuses || [template.status];
-                                    const statusForWaba = statuses[wabaIndex];
-
-                                    if (statusForWaba !== "APPROVED") {
+                                    if (wabaIndex === -1) {
+                                      // waba_id não encontrado na lista
                                       templateApprovedForAtendente = false;
                                       templateStatusMessage =
-                                        statusForWaba === "PENDING"
-                                          ? "Template pendente de aprovação nesta conexão"
-                                          : statusForWaba === "REJECTED"
-                                          ? "Template rejeitado nesta conexão"
-                                          : "Template não aprovado nesta conexão";
+                                        "Template não disponível nesta conexão";
+                                    } else {
+                                      // Verificar status específico para este waba_id
+                                      const statuses = template.statuses || [
+                                        template.status,
+                                      ];
+                                      const statusForWaba = statuses[wabaIndex];
+
+                                      if (statusForWaba !== "APPROVED") {
+                                        templateApprovedForAtendente = false;
+                                        templateStatusMessage =
+                                          statusForWaba === "PENDING"
+                                            ? "Template pendente de aprovação nesta conexão"
+                                            : statusForWaba === "REJECTED"
+                                              ? "Template rejeitado nesta conexão"
+                                              : "Template não aprovado nesta conexão";
+                                      }
                                     }
                                   }
-                                }
 
-                                // Verificar se atendente tem acesso ao template selecionado (ID do atendente)
-                                const isCompatible =
-                                  !template ||
-                                  (
-                                    template.atendente_ids || [template.atendente_id]
-                                  ).includes(atendente.id);
+                                  // Verificar se atendente tem acesso ao template selecionado (ID do atendente)
+                                  const isCompatible =
+                                    !template ||
+                                    (
+                                      template.atendente_ids || [
+                                        template.atendente_id,
+                                      ]
+                                    ).includes(atendente.id);
 
-                                // Verificar se atendente tem leads disponíveis
-                                const leadsDisponiveis =
-                                  Number(atendenteCounts[atendente.id]) || 0;
-                                const hasLeads = leadsDisponiveis > 0;
+                                  // Verificar se atendente tem leads disponíveis
+                                  const leadsDisponiveis =
+                                    Number(atendenteCounts[atendente.id]) || 0;
+                                  const hasLeads = leadsDisponiveis > 0;
 
-                                // Atendente só pode ser selecionado se:
-                                // 1. Tiver conexão
-                                // 2. For compatível com template (ID)
-                                // 3. Template estiver aprovado para seu waba_id
-                                // 4. Tiver pelo menos 1 lead disponível
-                                const canSelect = hasConnection
+                                  // Atendente só pode ser selecionado se:
+                                  // 1. Tiver conexão
+                                  // 2. For compatível com template (ID)
+                                  // 3. Template estiver aprovado para seu waba_id
+                                  // 4. Tiver pelo menos 1 lead disponível
+                                  const canSelect = hasConnection;
 
-                                return (
-                                  <label
-                                    key={atendente.id}
-                                    className={`flex items-center gap-2 ${
-                                      canSelect
-                                        ? "cursor-pointer"
-                                        : "cursor-not-allowed opacity-50"
-                                    }`}
-                                    title={atendente.nome}
-                                  >
-                                    <input
-                                      type="radio"
-                                      name="atendente-notificacao"
-                                      checked={isSelected}
-                                      disabled={!canSelect}
-                                      onChange={() =>
-                                        setSelectedAtendenteNotificacao(atendente.id)
-                                      }
-                                      className="w-5 h-5"
-                                    />
-                                    <span className="text-black font-medium text-base">
-                                      {atendente.nome} ({atendente.email}
-                                      {atendente.telefone && ` - ${atendente.telefone}`})
-                                     
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
+                                  return (
+                                    <label
+                                      key={atendente.id}
+                                      className={`flex items-center gap-2 ${
+                                        canSelect
+                                          ? "cursor-pointer"
+                                          : "cursor-not-allowed opacity-50"
+                                      }`}
+                                      title={atendente.nome}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="atendente-notificacao"
+                                        checked={isSelected}
+                                        disabled={!canSelect}
+                                        onChange={() =>
+                                          setSelectedAtendenteNotificacao(
+                                            atendente.id,
+                                          )
+                                        }
+                                        className="w-5 h-5"
+                                      />
+                                      <span className="text-black font-medium text-base">
+                                        {atendente.nome} ({atendente.email}
+                                        {atendente.telefone &&
+                                          ` - ${atendente.telefone}`}
+                                        )
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-
                     </div>
                   </div>
                 )}
@@ -3461,7 +3577,7 @@ export default function Form() {
                           selectedAtendentes.forEach((id) => {
                             const limite = Number(limitesIndividuais[id] || 0);
                             const maxDisponivel = Number(
-                              atendenteCounts[id] || 0
+                              atendenteCounts[id] || 0,
                             );
                             total += limite === 0 ? maxDisponivel : limite;
                           });
@@ -3511,16 +3627,16 @@ export default function Form() {
                                   let total = 0;
                                   selectedAtendentes.forEach((id) => {
                                     const limite = Number(
-                                      limitesIndividuais[id] || 0
+                                      limitesIndividuais[id] || 0,
                                     );
                                     const maxDisponivel = Number(
-                                      atendenteCounts[id] || 0
+                                      atendenteCounts[id] || 0,
                                     );
                                     total +=
                                       limite === 0 ? maxDisponivel : limite;
                                   });
                                   return total;
-                                })()) / Number(leadsPorLote)
+                                })()) / Number(leadsPorLote),
                           )}{" "}
                           lotes
                         </span>{" "}
@@ -3555,7 +3671,7 @@ export default function Form() {
                             quantidade !== 0 ? quantidade * 5 : limites * 5;
                           const horas = Math.floor(tempoTotalSegundos / 3600);
                           const minutos = Math.floor(
-                            (tempoTotalSegundos % 3600) / 60
+                            (tempoTotalSegundos % 3600) / 60,
                           );
                           const segundos = tempoTotalSegundos % 60;
 
