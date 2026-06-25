@@ -525,8 +525,8 @@ export default function Form() {
               hora_fim: disparo.horaFim || "",
             }
           : { ativo: false },
-        notificacao: disparo.atendenteNotificacao.value,
-        whatsapp_envio: disparo.whatsappEnvio.value,
+        notificacao:disparo.atendenteNotificacao ? disparo.atendenteNotificacao.value : null,
+        whatsapp_envio: disparo.whatsappEnvio ? disparo.whatsappEnvio.value : null,
       });
     }
 
@@ -1274,8 +1274,8 @@ export default function Form() {
         : {
             ativo: false,
           },
-      notificacao: atendenteNotificacao.value,
-      whatsapp_envio: whatsappEnvio.value,
+      notificacao: atendenteNotificacao ? atendenteNotificacao.value : null,
+      whatsapp_envio: whatsappEnvio ? whatsappEnvio.value : null,
     };
 
     try {
