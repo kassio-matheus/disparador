@@ -183,17 +183,6 @@ export default function Form() {
     getPrincipalConexao();
   }, []);
 
-  const filteredTemplates = useMemo(() => {
-    if (whatsappEnvio?.value === "principal") {
-      if (!principalConexao?.waba_id) return [];
-      return templates.filter((tmpl) => {
-        const wabaIds = tmpl.waba_ids ?? (tmpl.waba_id ? [tmpl.waba_id] : []);
-        return wabaIds.includes(principalConexao.waba_id);
-      });
-    }
-    return templates;
-  }, [templates, whatsappEnvio?.value, principalConexao]);
-
   // Lista de atendentes com seus respectivos waba_ids
   // TODO: Substituir por requisição ao backend quando tabela estiver pronta
   // Buscar atendentes do backend
@@ -525,7 +514,7 @@ export default function Form() {
               hora_fim: disparo.horaFim || "",
             }
           : { ativo: false },
-        notificacao:disparo.atendenteNotificacao ? disparo.atendenteNotificacao.value : null,
+        notificacao:disparo.atendenteNotificacao ? disparo.atendenteNotificacao : null,
         whatsapp_envio: disparo.whatsappEnvio ? disparo.whatsappEnvio.value : null,
       });
     }
@@ -979,6 +968,7 @@ export default function Form() {
       setNotificacaoAtivo(disparo.notificacaoAtivo);
       setSelectedAtendenteNotificacao(null);
       setWhatsappEnvio(disparo.whatsappEnvio);
+
       // Aguarda próximo render para liberar
       setTimeout(() => {
         isLoadingDisparoData.current = false;
@@ -1274,10 +1264,11 @@ export default function Form() {
         : {
             ativo: false,
           },
-      notificacao: atendenteNotificacao ? atendenteNotificacao.value : null,
+      notificacao: atendenteNotificacao,
       whatsapp_envio: whatsappEnvio ? whatsappEnvio.value : null,
     };
 
+  
     try {
       // Envie para sua API (ajuste a URL se necessário)
       const res = await fetch(
